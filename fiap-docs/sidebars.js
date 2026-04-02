@@ -17,11 +17,15 @@
 const sidebars = {
   // By default, Docusaurus generates a sidebar from the docs folder structure
   tutorialSidebar: [
-  {
-    type: 'doc',
-    id: 'fiap/inicio',
-  },
-],
+    {
+      type: 'doc',
+      id: 'fiap/inicio',
+    },
+    {
+      type: 'doc',
+      id: 'fiap/criar-nova-aula',
+    },
+  ],
 
   // But you can create a sidebar manually
   /*

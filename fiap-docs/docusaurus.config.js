@@ -95,6 +95,7 @@ const config = {
             position: 'left',
             label: 'FIAP',
           },
+          { to: '/aulas', label: 'Aulas', position: 'left' },
           {
             href: 'https://www.fiap.com.br/',
             label: 'FIAP',

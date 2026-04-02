@@ -56,6 +56,12 @@ const resetButtonStyle = {
   letterSpacing: '0.04em',
 };
 
+const READ_LINE_RATIO = 0.3;
+const MIN_SECTION_READ_MS = 8000;
+const MIN_SECTION_PROGRESS = 0.6;
+const ACTIVE_INTERACTION_WINDOW_MS = 15000;
+const READ_TICK_MS = 500;
+
 function getMiniIconStyle(active = false) {
   return {
     ...baseMiniIconStyle,
@@ -121,6 +127,8 @@ export default function AulaFiapLayout({
 
   const lastInteractionRef = useRef(Date.now());
   const viewedThisSessionRef = useRef(new Set());
+  const sectionReadMsRef = useRef({});
+  const sectionMaxProgressRef = useRef({});
 
   const storageNamespace = aulaId || titulo;
   const progressStorageKey = `fiap-progress-${storageNamespace}`;
@@ -249,7 +257,7 @@ export default function AulaFiapLayout({
           if (!el) return;
 
           const rect = el.getBoundingClientRect();
-          const distance = Math.abs(rect.top - window.innerHeight * 0.28);
+          const distance = Math.abs(rect.top - window.innerHeight * READ_LINE_RATIO);
 
           if (distance < bestDistance) {
             bestDistance = distance;
@@ -272,62 +280,78 @@ export default function AulaFiapLayout({
   }, [progressoLinks]);
 
   useEffect(() => {
+    if (!progressoLinks.length) return;
+
+    const sectionId = progressoLinks[currentSectionIndex]?.id;
+    if (!sectionId) return;
+
+    if (!viewedThisSessionRef.current.has(sectionId)) {
+      viewedThisSessionRef.current.add(sectionId);
+      setReadingStats((prev) => ({
+        ...prev,
+        sectionsViewed: {
+          ...prev.sectionsViewed,
+          [sectionId]: (prev.sectionsViewed?.[sectionId] || 0) + 1,
+        },
+        lastVisitedSection: sectionId,
+      }));
+      return;
+    }
+
+    setReadingStats((prev) => ({
+      ...prev,
+      lastVisitedSection: sectionId,
+    }));
+  }, [currentSectionIndex, progressoLinks]);
+
+  useEffect(() => {
     if (!progressoLinks.length || autoTrackingPaused) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const sectionId = entry.target.id;
-          if (!sectionId) return;
+    const interval = setInterval(() => {
+      if (document.hidden) return;
 
-          if (entry.isIntersecting) {
-            setCheckedItems((prev) => {
-              if (manualOverrides[sectionId]) return prev;
-              if (prev[sectionId]) return prev;
+      const section = progressoLinks[currentSectionIndex];
+      if (!section) return;
 
-              return {
-                ...prev,
-                [sectionId]: true,
-              };
-            });
+      const sectionId = section.id;
+      if (manualOverrides[sectionId]) return;
 
-            if (!viewedThisSessionRef.current.has(sectionId)) {
-              viewedThisSessionRef.current.add(sectionId);
+      if (Date.now() - lastInteractionRef.current > ACTIVE_INTERACTION_WINDOW_MS) return;
 
-              setReadingStats((prev) => ({
-                ...prev,
-                sectionsViewed: {
-                  ...prev.sectionsViewed,
-                  [sectionId]: (prev.sectionsViewed?.[sectionId] || 0) + 1,
-                },
-                lastVisitedSection: sectionId,
-              }));
-            } else {
-              setReadingStats((prev) => ({
-                ...prev,
-                lastVisitedSection: sectionId,
-              }));
-            }
-          }
+      const sectionEl = document.getElementById(sectionId);
+      if (!sectionEl) return;
+
+      const readLine = window.innerHeight * READ_LINE_RATIO;
+      const rect = sectionEl.getBoundingClientRect();
+      const isInReadZone = rect.top <= readLine && rect.bottom >= readLine;
+
+      if (!isInReadZone) return;
+
+      const currentReadMs = (sectionReadMsRef.current[sectionId] || 0) + READ_TICK_MS;
+      sectionReadMsRef.current[sectionId] = currentReadMs;
+
+      const sectionProgress = clamp((readLine - rect.top) / Math.max(rect.height, 1), 0, 1);
+      const currentMaxProgress = sectionMaxProgressRef.current[sectionId] || 0;
+      sectionMaxProgressRef.current[sectionId] = Math.max(currentMaxProgress, sectionProgress);
+
+      if (
+        currentReadMs >= MIN_SECTION_READ_MS &&
+        sectionMaxProgressRef.current[sectionId] >= MIN_SECTION_PROGRESS
+      ) {
+        setCheckedItems((prev) => {
+          if (prev[sectionId]) return prev;
+          return {
+            ...prev,
+            [sectionId]: true,
+          };
         });
-      },
-      {
-        threshold: 0.45,
-        rootMargin: '0px 0px -10% 0px',
       }
-    );
-
-    const elements = progressoLinks
-      .map((item) => document.getElementById(item.id))
-      .filter(Boolean);
-
-    elements.forEach((el) => observer.observe(el));
+    }, READ_TICK_MS);
 
     return () => {
-      elements.forEach((el) => observer.unobserve(el));
-      observer.disconnect();
+      clearInterval(interval);
     };
-  }, [progressoLinks, manualOverrides, autoTrackingPaused]);
+  }, [currentSectionIndex, progressoLinks, manualOverrides, autoTrackingPaused]);
 
   function toggleChecked(id) {
     setCheckedItems((prev) => ({
@@ -351,6 +375,8 @@ export default function AulaFiapLayout({
     setCheckedItems({});
     setManualOverrides({});
     viewedThisSessionRef.current = new Set();
+    sectionReadMsRef.current = {};
+    sectionMaxProgressRef.current = {};
     setAutoTrackingPaused(true);
 
     try {
@@ -372,6 +398,8 @@ export default function AulaFiapLayout({
 
     setCheckedItems({});
     setManualOverrides({});
+    sectionReadMsRef.current = {};
+    sectionMaxProgressRef.current = {};
     setReadingStats({
       visitCount: 1,
       totalTimeMs: 0,
