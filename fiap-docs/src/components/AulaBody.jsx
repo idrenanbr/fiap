@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import '../css/onboard.css';
 import OnboardSection from './OnboardSection';
 import OnboardImage from './OnboardImage';
@@ -84,18 +84,53 @@ function ContentBlocks({ blocks }) {
   );
 }
 
-function FooterRating() {
+function FooterRating({ aulaId }) {
+  const [rating, setRating] = useState(0);
+  const storageKey = useMemo(() => `fiap-rating-${aulaId || 'default'}`, [aulaId]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (!saved) return;
+      const parsed = Number(saved);
+      if (parsed >= 1 && parsed <= 5) {
+        setRating(parsed);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar avaliação:', error);
+    }
+  }, [storageKey]);
+
+  function handleRate(value) {
+    setRating(value);
+    try {
+      localStorage.setItem(storageKey, String(value));
+    } catch (error) {
+      console.error('Erro ao salvar avaliação:', error);
+    }
+  }
+
   return (
     <section id="secao-13" className="onboard-experience">
       <div className="onboard-experience-inner">
         <div className="experience-small">CONTE-NOS SOBRE A SUA EXPERIÊNCIA</div>
         <div className="experience-question">O QUE VOCÊ ACHOU DO CONTEÚDO DESTE CAPÍTULO?</div>
         <div className="experience-stars">
-          <span>☆</span>
-          <span>☆</span>
-          <span>☆</span>
-          <span>☆</span>
-          <span>☆</span>
+          {[1, 2, 3, 4, 5].map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={`experience-star-button ${rating >= value ? 'active' : ''}`}
+              onClick={() => handleRate(value)}
+              aria-label={`Avaliar com ${value} estrela${value > 1 ? 's' : ''}`}
+              title={`Avaliar com ${value} estrela${value > 1 ? 's' : ''}`}
+            >
+              {rating >= value ? '★' : '☆'}
+            </button>
+          ))}
+        </div>
+        <div className="experience-rating-status">
+          {rating > 0 ? `Sua avaliação: ${rating}/5` : 'Selecione de 1 a 5 estrelas'}
         </div>
       </div>
     </section>
@@ -103,6 +138,7 @@ function FooterRating() {
 }
 
 export default function AulaBody({
+  aulaId,
   hero,
   sectionMeta = defaultSectionMeta,
   sectionOrder = defaultSectionOrder,
@@ -117,7 +153,7 @@ export default function AulaBody({
         </NarrativeSection>
       ))}
 
-      <FooterRating />
+      <FooterRating aulaId={aulaId} />
     </div>
   );
 }

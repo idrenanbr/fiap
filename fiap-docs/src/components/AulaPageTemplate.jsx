@@ -28,7 +28,13 @@ export default function AulaPageTemplate({ config }) {
       appearanceContent={<ToolPanelContent panel={toolPanels?.appearance} />}
       readingResources={<ToolPanelContent panel={toolPanels?.reading} />}
     >
-      <AulaBody hero={hero} sectionMeta={sectionMeta} sectionOrder={sectionOrder} sectionBlocks={sectionBlocks} />
+      <AulaBody
+        aulaId={aulaId}
+        hero={hero}
+        sectionMeta={sectionMeta}
+        sectionOrder={sectionOrder}
+        sectionBlocks={sectionBlocks}
+      />
     </AulaFiapLayout>
   );
 }
