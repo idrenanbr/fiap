@@ -62,6 +62,10 @@ const MIN_SECTION_PROGRESS = 0.6;
 const ACTIVE_INTERACTION_WINDOW_MS = 15000;
 const READ_TICK_MS = 500;
 
+function formatReadMs(ms) {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 function getMiniIconStyle(active = false) {
   return {
     ...baseMiniIconStyle,
@@ -124,6 +128,14 @@ export default function AulaFiapLayout({
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  const [readHud, setReadHud] = useState({
+    sectionLabel: '—',
+    elapsedMs: 0,
+    progress: 0,
+    inReadZone: false,
+    active: false,
+    read: false,
+  });
 
   const lastInteractionRef = useRef(Date.now());
   const viewedThisSessionRef = useRef(new Set());
@@ -314,9 +326,28 @@ export default function AulaFiapLayout({
       if (!section) return;
 
       const sectionId = section.id;
+      const sectionLabel = section.label;
+      const alreadyRead = !!checkedItems[sectionId];
+
+      const setHud = (partial) => {
+        setReadHud({
+          sectionLabel,
+          elapsedMs: sectionReadMsRef.current[sectionId] || 0,
+          progress: sectionMaxProgressRef.current[sectionId] || 0,
+          inReadZone: false,
+          active: false,
+          read: alreadyRead,
+          ...partial,
+        });
+      };
+
       if (manualOverrides[sectionId]) return;
 
-      if (Date.now() - lastInteractionRef.current > ACTIVE_INTERACTION_WINDOW_MS) return;
+      const isActive = Date.now() - lastInteractionRef.current <= ACTIVE_INTERACTION_WINDOW_MS;
+      if (!isActive) {
+        setHud({ active: false, read: alreadyRead });
+        return;
+      }
 
       const sectionEl = document.getElementById(sectionId);
       if (!sectionEl) return;
@@ -325,7 +356,10 @@ export default function AulaFiapLayout({
       const rect = sectionEl.getBoundingClientRect();
       const isInReadZone = rect.top <= readLine && rect.bottom >= readLine;
 
-      if (!isInReadZone) return;
+      if (!isInReadZone) {
+        setHud({ inReadZone: false, active: true, read: alreadyRead });
+        return;
+      }
 
       const currentReadMs = (sectionReadMsRef.current[sectionId] || 0) + READ_TICK_MS;
       sectionReadMsRef.current[sectionId] = currentReadMs;
@@ -334,12 +368,24 @@ export default function AulaFiapLayout({
       const currentMaxProgress = sectionMaxProgressRef.current[sectionId] || 0;
       sectionMaxProgressRef.current[sectionId] = Math.max(currentMaxProgress, sectionProgress);
 
+      setHud({
+        elapsedMs: sectionReadMsRef.current[sectionId] || 0,
+        progress: sectionMaxProgressRef.current[sectionId] || 0,
+        inReadZone: true,
+        active: true,
+        read: alreadyRead,
+      });
+
       if (
         currentReadMs >= MIN_SECTION_READ_MS &&
         sectionMaxProgressRef.current[sectionId] >= MIN_SECTION_PROGRESS
       ) {
         setCheckedItems((prev) => {
           if (prev[sectionId]) return prev;
+          setReadHud((prevHud) => ({
+            ...prevHud,
+            read: true,
+          }));
           return {
             ...prev,
             [sectionId]: true,
@@ -351,7 +397,7 @@ export default function AulaFiapLayout({
     return () => {
       clearInterval(interval);
     };
-  }, [currentSectionIndex, progressoLinks, manualOverrides, autoTrackingPaused]);
+  }, [currentSectionIndex, progressoLinks, manualOverrides, autoTrackingPaused, checkedItems]);
 
   function toggleChecked(id) {
     setCheckedItems((prev) => ({
@@ -377,6 +423,14 @@ export default function AulaFiapLayout({
     viewedThisSessionRef.current = new Set();
     sectionReadMsRef.current = {};
     sectionMaxProgressRef.current = {};
+    setReadHud({
+      sectionLabel: '—',
+      elapsedMs: 0,
+      progress: 0,
+      inReadZone: false,
+      active: false,
+      read: false,
+    });
     setAutoTrackingPaused(true);
 
     try {
@@ -400,6 +454,14 @@ export default function AulaFiapLayout({
     setManualOverrides({});
     sectionReadMsRef.current = {};
     sectionMaxProgressRef.current = {};
+    setReadHud({
+      sectionLabel: '—',
+      elapsedMs: 0,
+      progress: 0,
+      inReadZone: false,
+      active: false,
+      read: false,
+    });
     setReadingStats({
       visitCount: 1,
       totalTimeMs: 0,
@@ -958,6 +1020,28 @@ export default function AulaFiapLayout({
             }}
           >
             {currentDisplay}
+          </div>
+
+          <div
+            style={{
+              fontSize: '11px',
+              color: readHud.read ? '#7dffb3' : '#ffd3e6',
+              background: 'rgba(0,0,0,0.35)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '10px',
+              padding: '8px 10px',
+              maxWidth: '220px',
+              lineHeight: 1.35,
+              textAlign: 'center',
+            }}
+            title="Status de leitura da seção atual"
+          >
+            {readHud.read ? 'LIDO' : readHud.inReadZone && readHud.active ? 'LENDO' : 'AGUARDANDO LEITURA'}
+            <br />
+            {readHud.sectionLabel}
+            <br />
+            {formatReadMs(readHud.elapsedMs)} / {formatReadMs(MIN_SECTION_READ_MS)} |{' '}
+            {Math.round(readHud.progress * 100)}% / {Math.round(MIN_SECTION_PROGRESS * 100)}%
           </div>
 
           {showBackToTop && (
