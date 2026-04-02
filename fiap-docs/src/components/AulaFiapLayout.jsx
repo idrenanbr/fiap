@@ -261,15 +261,21 @@ export default function AulaFiapLayout({
       setShowBackToTop(scrollTop > 450);
 
       if (progressoLinks.length) {
+        const readLine = window.innerHeight * READ_LINE_RATIO;
         let bestIndex = 0;
         let bestDistance = Number.POSITIVE_INFINITY;
+        let containingIndex = -1;
 
         progressoLinks.forEach((item, index) => {
           const el = document.getElementById(item.id);
           if (!el) return;
 
           const rect = el.getBoundingClientRect();
-          const distance = Math.abs(rect.top - window.innerHeight * READ_LINE_RATIO);
+          if (rect.top <= readLine && rect.bottom >= readLine) {
+            containingIndex = index;
+          }
+
+          const distance = Math.abs(rect.top - readLine);
 
           if (distance < bestDistance) {
             bestDistance = distance;
@@ -277,7 +283,7 @@ export default function AulaFiapLayout({
           }
         });
 
-        setCurrentSectionIndex(bestIndex);
+        setCurrentSectionIndex(containingIndex >= 0 ? containingIndex : bestIndex);
       }
     }
 
